@@ -2,9 +2,6 @@
 // Build target: WebAssembly
 // Simple MP4 parser that logs bytes to browser console
 
-// Import the standard library, but we'll be careful about what we use
-const std = @import("std");
-
 // WASM imports for browser interaction
 extern "env" fn consoleLog(ptr: [*]const u8, len: usize) void;
 extern "env" fn createVideoElement(ptr: [*]const u8, len: usize) void;
