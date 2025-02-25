@@ -179,14 +179,17 @@
             testElement.style.fontFamily = 'monospace';
             testElement.style.fontSize = byteContent.style.fontSize;
             testElement.style.visibility = 'hidden';
-            testElement.textContent = 'X';
+            testElement.textContent = '0123456789ABCDEF'; // Use a representative sample of hex characters
             document.body.appendChild(testElement);
             
-            const charWidth = testElement.getBoundingClientRect().width;
+            const charWidth = testElement.getBoundingClientRect().width / 16; // Average width of the test string
             document.body.removeChild(testElement);
             
-            // Add a small buffer to account for reduced padding
-            return Math.floor(window.innerWidth / charWidth) - 2;
+            // Calculate available width considering padding
+            const availableWidth = window.innerWidth - 10; // 5px padding on each side
+            
+            // Return the number of characters that will fit
+            return Math.floor(availableWidth / charWidth);
         }
         
         // Calculate how many lines fit in the viewport
@@ -270,12 +273,13 @@
         
         // Pad a message to fill the entire width
         function padMessageToWidth(message, width) {
-            // If the message is already longer than the width, return it as is
-            if (message.length >= width) {
-                return message;
+            // Ensure all messages are the same length by truncating or padding
+            if (message.length > width) {
+                // Truncate if too long
+                return message.substring(0, width);
             }
             
-            // Calculate padding needed on each side - reduced padding
+            // Calculate padding needed on each side
             const totalPadding = width - message.length;
             const leftPadding = Math.floor(totalPadding / 2);
             
@@ -325,6 +329,9 @@
             if (streamingActive) {
                 return;
             }
+            
+            // Clear any existing background bytes first
+            clearBackground();
             
             streamingActive = true;
             currentStreamPosition = 0;
@@ -401,8 +408,9 @@
                                 console.log(msg);
                             };
                             
-                            // Log message and potentially add to background
-                            if (message.includes(':') && message.match(/0x[0-9A-F]+:/)) {
+                            // Only add to background if we're actively streaming
+                            // and it's a byte format message (contains hex address)
+                            if (streamingActive && message.includes(':') && message.match(/0x[0-9A-F]+:/)) {
                                 addToBackground(message);
                             }
                             console.log(message);
@@ -499,17 +507,8 @@
                         // Parse the MP4 file
                         zigModule.parseMP4();
                         
-                        // Log some bytes for demonstration and add to background
-                        const originalConsoleLog = window.consoleLog;
-                        window.consoleLog = (message) => {
-                            addToBackground(message);
-                            if (originalConsoleLog) originalConsoleLog(message);
-                        };
-                        
-                        zigModule.logBytes(128);
-                        
-                        // Restore original console log
-                        window.consoleLog = originalConsoleLog;
+                        // Don't log initial bytes - we'll only show streaming bytes
+                        // when the video plays
                     }
                 };
                 
