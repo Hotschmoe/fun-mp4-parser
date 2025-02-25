@@ -52,7 +52,8 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             text-align: center;
-            animation: fadeIn 0.3s ease-in-out;
+            opacity: 0;
+            animation: fadeIn 0.5s ease-out forwards;
         }
         @keyframes fadeIn {
             from { opacity: 0; }
@@ -138,6 +139,18 @@
             color: white;
             font-size: 0.9rem;
         }
+        .speed-control {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+        }
+        .speed-control label {
+            font-size: 0.9rem;
+        }
+        .speed-control input {
+            width: 60px;
+        }
     </style>
 </head>
 <body>
@@ -166,6 +179,10 @@
                 </label>
                 <button id="clear-background">Clear</button>
             </div>
+            <div class="speed-control">
+                <label for="stream-speed">Speed (ms):</label>
+                <input type="number" id="stream-speed" min="50" max="1000" step="50" value="200">
+            </div>
         </div>
     </div>
 
@@ -181,6 +198,7 @@
         const clearBackgroundButton = document.getElementById('clear-background');
         const byteBackground = document.getElementById('byte-background');
         const byteContent = document.getElementById('byte-content');
+        const streamSpeedInput = document.getElementById('stream-speed');
         
         // WASM module reference
         let zigModule = null;
@@ -188,11 +206,13 @@
         // Streaming state
         let streamingInterval = null;
         let currentStreamPosition = 0;
-        const BYTES_PER_STREAM = 64;
-        const STREAM_INTERVAL_MS = 300;
+        const BYTES_PER_STREAM = 16; // Reduced to make it smoother
+        let STREAM_INTERVAL_MS = 200; // Default, can be changed by user
         
         // Background byte data
         let backgroundBytes = [];
+        let pendingBytes = [];
+        let isProcessingBytes = false;
         const MAX_BACKGROUND_LINES = 300;
         
         // Calculate how many characters fit in a line
@@ -243,24 +263,46 @@
             console.log(message);
         }
         
-        // Add bytes to background
+        // Add bytes to background queue
         function addToBackground(message) {
             if (message.includes(':')) {
                 // Pad the message to fill the entire width
                 const charsPerLine = calculateCharsPerLine();
                 const paddedMessage = padMessageToWidth(message, charsPerLine);
                 
-                // Add new line at the end
-                backgroundBytes.push(paddedMessage);
+                // Add to pending queue
+                pendingBytes.push(paddedMessage);
                 
-                // Keep only the last MAX_BACKGROUND_LINES lines
-                if (backgroundBytes.length > MAX_BACKGROUND_LINES) {
-                    backgroundBytes.shift();
+                // Start processing if not already
+                if (!isProcessingBytes) {
+                    processNextByte();
                 }
-                
-                // Update the background
-                updateByteBackground();
             }
+        }
+        
+        // Process next byte from the queue
+        function processNextByte() {
+            if (pendingBytes.length === 0) {
+                isProcessingBytes = false;
+                return;
+            }
+            
+            isProcessingBytes = true;
+            const nextByte = pendingBytes.shift();
+            
+            // Add to background
+            backgroundBytes.push(nextByte);
+            
+            // Keep only the last MAX_BACKGROUND_LINES lines
+            if (backgroundBytes.length > MAX_BACKGROUND_LINES) {
+                backgroundBytes.shift();
+            }
+            
+            // Update the background
+            updateByteBackground();
+            
+            // Process next byte after delay
+            setTimeout(processNextByte, 100);
         }
         
         // Pad a message to fill the entire width
@@ -302,6 +344,10 @@
                 const lineElement = document.createElement('div');
                 lineElement.className = 'byte-line';
                 lineElement.textContent = backgroundBytes[i];
+                
+                // Add a slight delay for each line to create a cascade effect
+                lineElement.style.animationDelay = `${(i - startIndex) * 0.05}s`;
+                
                 byteContent.appendChild(lineElement);
             }
         }
@@ -309,6 +355,8 @@
         // Clear the background
         function clearBackground() {
             backgroundBytes = [];
+            pendingBytes = [];
+            isProcessingBytes = false;
             updateByteBackground();
         }
         
@@ -319,6 +367,9 @@
             }
             
             currentStreamPosition = 0;
+            
+            // Update interval from user input
+            STREAM_INTERVAL_MS = parseInt(streamSpeedInput.value) || 200;
             
             if (streamBytesCheckbox.checked && zigModule) {
                 streamingInterval = setInterval(() => {
@@ -523,6 +574,14 @@
                 startStreamingBytes();
             } else {
                 stopStreamingBytes();
+            }
+        });
+        
+        // Stream speed input
+        streamSpeedInput.addEventListener('change', () => {
+            if (streamingInterval) {
+                stopStreamingBytes();
+                startStreamingBytes();
             }
         });
         
