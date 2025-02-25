@@ -40,7 +40,7 @@
             height: 100%;
             overflow: hidden;
             box-sizing: border-box;
-            padding: 20px;
+            padding: 5px;
             display: flex;
             flex-direction: column;
             align-items: center;
@@ -185,7 +185,8 @@
             const charWidth = testElement.getBoundingClientRect().width;
             document.body.removeChild(testElement);
             
-            return Math.floor(window.innerWidth / charWidth);
+            // Add a small buffer to account for reduced padding
+            return Math.floor(window.innerWidth / charWidth) - 2;
         }
         
         // Calculate how many lines fit in the viewport
@@ -274,12 +275,12 @@
                 return message;
             }
             
-            // Calculate padding needed on each side
+            // Calculate padding needed on each side - reduced padding
             const totalPadding = width - message.length;
             const leftPadding = Math.floor(totalPadding / 2);
             
-            // Pad with spaces on both sides to center the text
-            return ' '.repeat(leftPadding) + message + ' '.repeat(totalPadding - leftPadding);
+            // Use minimal padding to get closer to the edges
+            return ' '.repeat(Math.max(1, leftPadding / 4)) + message + ' '.repeat(Math.max(1, (totalPadding - leftPadding) / 4));
         }
         
         // Update the byte background display
