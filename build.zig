@@ -28,6 +28,16 @@ pub fn build(b: *std.Build) void {
     // Disable entry point for WebAssembly
     exe.entry = .disabled;
 
+    // Make sure all exported functions are available
+    // Note: In Zig 0.13.0, functions marked with 'export' are automatically exported
+    // We don't need to explicitly list them, but we're documenting them here:
+    // - addData
+    // - parseMP4
+    // - logBytes
+    // - logBytesAtPosition
+    // - resetBuffer
+    // - getBufferUsed
+
     // Install in the output directory
     b.installArtifact(exe);
 
@@ -69,9 +79,3 @@ pub fn build(b: *std.Build) void {
     deploy_step.dependOn(&copy_html.step);
     deploy_step.dependOn(&copy_assets.step);
 }
-
-// To set 'python' as an alias for 'py' on Windows:
-// 1. Open PowerShell as administrator
-// 2. Run: New-Item -ItemType SymbolicLink -Path "$env:USERPROFILE\python.exe" -Target "$env:USERPROFILE\py.exe"
-// Or add this to your PowerShell profile:
-// Set-Alias -Name python -Value py

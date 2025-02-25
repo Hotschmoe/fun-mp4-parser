@@ -180,6 +180,39 @@ export fn logBytes(count: usize) void {
     }
 }
 
+// Log bytes at a specific position (for streaming during playback)
+export fn logBytesAtPosition(position: usize, count: usize) void {
+    if (position >= buffer_used) return;
+
+    const bytes_to_log = min(count, buffer_used - position);
+    var i: usize = position;
+    const end_pos = position + bytes_to_log;
+
+    while (i < end_pos) {
+        var log_buf: [128]u8 = undefined;
+        const end = min(i + 16, end_pos);
+        var log_pos: usize = 0;
+
+        // Format position (simplified hex formatting)
+        log_pos += formatHex(log_buf[log_pos..], i, 8);
+        log_buf[log_pos] = ':';
+        log_pos += 1;
+        log_buf[log_pos] = ' ';
+        log_pos += 1;
+
+        // Format hex values
+        var j: usize = i;
+        while (j < end) : (j += 1) {
+            log_pos += formatHex(log_buf[log_pos..], buffer[j], 2);
+            log_buf[log_pos] = ' ';
+            log_pos += 1;
+        }
+
+        logString(log_buf[0..log_pos]);
+        i = end;
+    }
+}
+
 // Simple min function
 fn min(a: usize, b: usize) usize {
     return if (a < b) a else b;

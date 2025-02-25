@@ -73,6 +73,22 @@
             margin-top: 10px;
             color: #555;
         }
+        .controls {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .controls label {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+        }
+        .controls button {
+            background-color: #f44336;
+            color: white;
+        }
     </style>
 </head>
 <body>
@@ -93,6 +109,13 @@
         <div id="video-container">
             <h2>Video Playback</h2>
             <video id="video-player" controls></video>
+            <div class="controls">
+                <label>
+                    <input type="checkbox" id="stream-bytes" checked>
+                    Stream bytes during playback
+                </label>
+                <button id="clear-log">Clear Log</button>
+            </div>
         </div>
         
         <div>
@@ -110,9 +133,17 @@
         const videoContainer = document.getElementById('video-container');
         const videoPlayer = document.getElementById('video-player');
         const logOutput = document.getElementById('log');
+        const streamBytesCheckbox = document.getElementById('stream-bytes');
+        const clearLogButton = document.getElementById('clear-log');
         
         // WASM module reference
         let zigModule = null;
+        
+        // Streaming state
+        let streamingInterval = null;
+        let currentStreamPosition = 0;
+        const BYTES_PER_STREAM = 32;
+        const STREAM_INTERVAL_MS = 500;
         
         // Log messages to UI
         function logMessage(message) {
@@ -120,6 +151,46 @@
             logOutput.innerHTML += `[${timestamp}] ${message}\n`;
             logOutput.scrollTop = logOutput.scrollHeight;
             console.log(message);
+        }
+        
+        // Clear the log
+        function clearLog() {
+            logOutput.innerHTML = '';
+        }
+        
+        // Start streaming bytes
+        function startStreamingBytes() {
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+            }
+            
+            currentStreamPosition = 0;
+            
+            if (streamBytesCheckbox.checked && zigModule) {
+                streamingInterval = setInterval(() => {
+                    // Only stream if video is playing
+                    if (!videoPlayer.paused) {
+                        // Calculate position based on video playback progress
+                        const progress = videoPlayer.currentTime / videoPlayer.duration;
+                        const totalBytes = zigModule.getBufferUsed();
+                        const targetPosition = Math.floor(progress * totalBytes);
+                        
+                        // Log bytes at the current position
+                        zigModule.logBytesAtPosition(targetPosition, BYTES_PER_STREAM);
+                        
+                        // Update current position
+                        currentStreamPosition = targetPosition + BYTES_PER_STREAM;
+                    }
+                }, STREAM_INTERVAL_MS);
+            }
+        }
+        
+        // Stop streaming bytes
+        function stopStreamingBytes() {
+            if (streamingInterval) {
+                clearInterval(streamingInterval);
+                streamingInterval = null;
+            }
         }
         
         // Initialize WebAssembly module
@@ -152,6 +223,11 @@
                             videoPlayer.src = url;
                             videoContainer.style.display = 'block';
                             logMessage("Video ready for playback");
+                            
+                            // Setup video events
+                            videoPlayer.onplay = startStreamingBytes;
+                            videoPlayer.onpause = stopStreamingBytes;
+                            videoPlayer.onended = stopStreamingBytes;
                         }
                     }
                 };
@@ -183,6 +259,7 @@
             zigModule.resetBuffer();
             videoPlayer.src = '';
             videoContainer.style.display = 'none';
+            stopStreamingBytes();
             
             statusElement.textContent = `Processing: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
             
@@ -248,6 +325,18 @@
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
+            }
+        });
+        
+        // Clear log button
+        clearLogButton.addEventListener('click', clearLog);
+        
+        // Stream bytes checkbox
+        streamBytesCheckbox.addEventListener('change', () => {
+            if (streamBytesCheckbox.checked) {
+                startStreamingBytes();
+            } else {
+                stopStreamingBytes();
             }
         });
         
