@@ -24,7 +24,7 @@
             width: 100vw;
             height: 100vh;
             z-index: -1;
-            color: rgba(80, 80, 80, 0.15);
+            color: rgba(60, 60, 60, 0.2);
             font-family: monospace;
             overflow: hidden;
             pointer-events: none;
@@ -117,34 +117,10 @@
             text-align: center;
         }
         .controls {
-            margin-top: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .controls label {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            font-size: 0.9rem;
-        }
-        .controls button {
-            background-color: #f44336;
-            color: white;
-            font-size: 0.9rem;
+            display: none;
         }
         .speed-control {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-top: 10px;
-        }
-        .speed-control label {
-            font-size: 0.9rem;
-        }
-        .speed-control input {
-            width: 60px;
+            display: none;
         }
     </style>
 </head>
@@ -167,17 +143,6 @@
         
         <div id="video-container">
             <video id="video-player" controls></video>
-            <div class="controls">
-                <label>
-                    <input type="checkbox" id="stream-bytes" checked>
-                    Stream bytes
-                </label>
-                <button id="clear-background">Clear</button>
-            </div>
-            <div class="speed-control">
-                <label for="stream-speed">Speed (ms):</label>
-                <input type="number" id="stream-speed" min="50" max="1000" step="50" value="200">
-            </div>
         </div>
     </div>
 
@@ -189,20 +154,18 @@
         const statusElement = document.getElementById('status');
         const videoContainer = document.getElementById('video-container');
         const videoPlayer = document.getElementById('video-player');
-        const streamBytesCheckbox = document.getElementById('stream-bytes');
-        const clearBackgroundButton = document.getElementById('clear-background');
         const byteBackground = document.getElementById('byte-background');
         const byteContent = document.getElementById('byte-content');
-        const streamSpeedInput = document.getElementById('stream-speed');
         
         // WASM module reference
         let zigModule = null;
         
         // Streaming state
-        let streamingInterval = null;
+        let streamingActive = false;
+        let animationFrameId = null;
+        let lastTimestamp = 0;
         let currentStreamPosition = 0;
-        const BYTES_PER_STREAM = 16; // Reduced to make it smoother
-        let STREAM_INTERVAL_MS = 200; // Default, can be changed by user
+        const BYTES_PER_STREAM = 8; // Smaller chunks for smoother streaming
         
         // Background byte data
         let backgroundBytes = [];
@@ -245,8 +208,8 @@
             const windowWidth = window.innerWidth;
             const windowHeight = window.innerHeight;
             
-            // Calculate font size based on window dimensions
-            const baseFontSize = Math.min(windowWidth / 80, windowHeight / 40);
+            // Calculate font size based on window dimensions - doubled
+            const baseFontSize = Math.min(windowWidth / 40, windowHeight / 20);
             byteContent.style.fontSize = `${baseFontSize}px`;
             
             // Update the background to fill the screen
@@ -296,8 +259,12 @@
             // Update the background
             updateByteBackground();
             
-            // Process next byte after delay - faster processing
-            setTimeout(processNextByte, 50);
+            // Process next byte immediately
+            if (pendingBytes.length > 0) {
+                setTimeout(processNextByte, 20); // Small delay to prevent UI blocking
+            } else {
+                isProcessingBytes = false;
+            }
         }
         
         // Pad a message to fill the entire width
@@ -340,9 +307,6 @@
                 lineElement.className = 'byte-line';
                 lineElement.textContent = backgroundBytes[i];
                 
-                // Minimal delay for animation to avoid conflicts
-                lineElement.style.animationDelay = `${(i - startIndex) * 0.01}s`;
-                
                 byteContent.appendChild(lineElement);
             }
         }
@@ -355,51 +319,62 @@
             updateByteBackground();
         }
         
-        // Start streaming bytes
+        // Start streaming bytes in real time
         function startStreamingBytes() {
-            if (streamingInterval) {
-                clearInterval(streamingInterval);
+            if (streamingActive) {
+                return;
             }
             
+            streamingActive = true;
             currentStreamPosition = 0;
+            lastTimestamp = 0;
             
-            // Update interval from user input
-            STREAM_INTERVAL_MS = parseInt(streamSpeedInput.value) || 200;
-            
-            if (streamBytesCheckbox.checked && zigModule) {
-                streamingInterval = setInterval(() => {
-                    // Only stream if video is playing
-                    if (!videoPlayer.paused) {
-                        // Calculate position based on video playback progress
-                        const progress = videoPlayer.currentTime / videoPlayer.duration;
-                        const totalBytes = zigModule.getBufferUsed();
-                        const targetPosition = Math.floor(progress * totalBytes);
-                        
-                        // Intercept the log output for background display
-                        const originalConsoleLog = window.consoleLog;
-                        window.consoleLog = (message) => {
-                            addToBackground(message);
-                            if (originalConsoleLog) originalConsoleLog(message);
-                        };
-                        
-                        // Log bytes at the current position
-                        zigModule.logBytesAtPosition(targetPosition, BYTES_PER_STREAM);
-                        
-                        // Restore original console log
-                        window.consoleLog = originalConsoleLog;
-                        
-                        // Update current position
-                        currentStreamPosition = targetPosition + BYTES_PER_STREAM;
-                    }
-                }, STREAM_INTERVAL_MS);
+            // Start the animation frame loop for real-time streaming
+            function streamFrame(timestamp) {
+                if (!streamingActive || videoPlayer.paused) {
+                    streamingActive = false;
+                    return;
+                }
+                
+                // Calculate time delta and decide if we should stream
+                // We'll stream bytes based on video playback position
+                const progress = videoPlayer.currentTime / videoPlayer.duration;
+                const totalBytes = zigModule.getBufferUsed();
+                const targetPosition = Math.floor(progress * totalBytes);
+                
+                // Only log if position has changed enough
+                if (Math.abs(targetPosition - currentStreamPosition) > BYTES_PER_STREAM) {
+                    // Intercept the log output for background display
+                    const originalConsoleLog = window.consoleLog;
+                    window.consoleLog = (message) => {
+                        addToBackground(message);
+                        if (originalConsoleLog) originalConsoleLog(message);
+                    };
+                    
+                    // Log bytes at the current position
+                    zigModule.logBytesAtPosition(targetPosition, BYTES_PER_STREAM);
+                    
+                    // Restore original console log
+                    window.consoleLog = originalConsoleLog;
+                    
+                    // Update current position
+                    currentStreamPosition = targetPosition;
+                }
+                
+                // Request next frame
+                animationFrameId = requestAnimationFrame(streamFrame);
             }
+            
+            // Start the animation frame loop
+            animationFrameId = requestAnimationFrame(streamFrame);
         }
         
         // Stop streaming bytes
         function stopStreamingBytes() {
-            if (streamingInterval) {
-                clearInterval(streamingInterval);
-                streamingInterval = null;
+            streamingActive = false;
+            if (animationFrameId) {
+                cancelAnimationFrame(animationFrameId);
+                animationFrameId = null;
             }
         }
         
@@ -557,26 +532,6 @@
         fileInput.addEventListener('change', (e) => {
             if (e.target.files.length > 0) {
                 handleFile(e.target.files[0]);
-            }
-        });
-        
-        // Clear background button
-        clearBackgroundButton.addEventListener('click', clearBackground);
-        
-        // Stream bytes checkbox
-        streamBytesCheckbox.addEventListener('change', () => {
-            if (streamBytesCheckbox.checked) {
-                startStreamingBytes();
-            } else {
-                stopStreamingBytes();
-            }
-        });
-        
-        // Stream speed input
-        streamSpeedInput.addEventListener('change', () => {
-            if (streamingInterval) {
-                stopStreamingBytes();
-                startStreamingBytes();
             }
         });
         
