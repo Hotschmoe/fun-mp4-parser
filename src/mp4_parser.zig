@@ -41,7 +41,7 @@ const BoxHeader = struct {
 };
 
 // Simple memory buffer for processing data
-var buffer: [1024 * 1024]u8 = undefined; // 1MB buffer
+var buffer: [100 * 1024 * 1024]u8 = undefined; // 100MB buffer
 var buffer_used: usize = 0;
 
 // Add data to our buffer

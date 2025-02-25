@@ -179,17 +179,14 @@
             testElement.style.fontFamily = 'monospace';
             testElement.style.fontSize = byteContent.style.fontSize;
             testElement.style.visibility = 'hidden';
-            testElement.textContent = '0123456789ABCDEF'; // Use a representative sample of hex characters
+            testElement.textContent = 'X';
             document.body.appendChild(testElement);
             
-            const charWidth = testElement.getBoundingClientRect().width / 16; // Average width of the test string
+            const charWidth = testElement.getBoundingClientRect().width;
             document.body.removeChild(testElement);
             
-            // Calculate available width considering padding
-            const availableWidth = window.innerWidth - 10; // 5px padding on each side
-            
-            // Return the number of characters that will fit
-            return Math.floor(availableWidth / charWidth);
+            // Add a small buffer to account for reduced padding
+            return Math.floor(window.innerWidth / charWidth) - 2;
         }
         
         // Calculate how many lines fit in the viewport
