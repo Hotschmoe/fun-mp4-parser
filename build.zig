@@ -51,7 +51,7 @@ pub fn build(b: *std.Build) void {
 
     // Add a run step to start a Python HTTP server
     // Try both 'python' and 'py' commands to be compatible with different systems
-    const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; try { python -m http.server 8000 } catch { py -m http.server 8000 }" });
+    const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; try { py -m http.server 8000 } catch { python -m http.server 8000 }" });
     run_cmd.step.dependOn(&copy_wasm.step);
     run_cmd.step.dependOn(&copy_html.step);
 
