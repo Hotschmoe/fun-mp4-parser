@@ -7,47 +7,80 @@
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
+            margin: 0;
+            padding: 0;
             background-color: #f5f5f5;
             position: relative;
-            overflow-x: hidden;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
         }
         #byte-background {
             position: fixed;
             top: 0;
             left: 0;
-            width: 100%;
-            height: 100%;
+            width: 100vw;
+            height: 100vh;
             z-index: -1;
             color: rgba(100, 100, 100, 0.1);
             font-family: monospace;
-            font-size: 12px;
             overflow: hidden;
             pointer-events: none;
-            white-space: pre;
-            line-height: 1.5;
-            padding: 20px;
             box-sizing: border-box;
+            padding: 0;
+            margin: 0;
+        }
+        #byte-content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            box-sizing: border-box;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+        }
+        .byte-line {
+            width: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            text-align: center;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
         }
         .container {
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 255, 255, 0.8);
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
             backdrop-filter: blur(5px);
             -webkit-backdrop-filter: blur(5px);
+            max-width: 500px;
+            width: 90%;
+            z-index: 1;
         }
         h1 {
             color: #333;
+            margin-top: 0;
+            font-size: 1.5rem;
+            text-align: center;
         }
         .upload-area {
             border: 2px dashed #ccc;
             border-radius: 8px;
-            padding: 40px;
+            padding: 20px;
             text-align: center;
-            margin: 20px 0;
+            margin: 15px 0;
             transition: border-color 0.3s;
             background-color: rgba(250, 250, 250, 0.7);
         }
@@ -59,11 +92,11 @@
             background-color: #4CAF50;
             color: white;
             border: none;
-            padding: 10px 15px;
+            padding: 8px 12px;
             text-align: center;
             text-decoration: none;
             display: inline-block;
-            font-size: 16px;
+            font-size: 14px;
             margin: 4px 2px;
             cursor: pointer;
             border-radius: 4px;
@@ -73,26 +106,19 @@
             cursor: not-allowed;
         }
         #video-container {
-            margin-top: 20px;
+            margin-top: 15px;
             display: none;
         }
         video {
-            max-width: 100%;
+            width: 100%;
             border-radius: 4px;
-        }
-        #log {
-            margin-top: 20px;
-            max-height: 200px;
-            overflow-y: auto;
-            padding: 10px;
-            background-color: rgba(240, 240, 240, 0.7);
-            border-radius: 4px;
-            font-family: monospace;
-            white-space: pre-wrap;
+            background-color: #000;
         }
         .status {
             margin-top: 10px;
             color: #555;
+            font-size: 0.9rem;
+            text-align: center;
         }
         .controls {
             margin-top: 10px;
@@ -105,21 +131,24 @@
             align-items: center;
             gap: 8px;
             cursor: pointer;
+            font-size: 0.9rem;
         }
         .controls button {
             background-color: #f44336;
             color: white;
+            font-size: 0.9rem;
         }
     </style>
 </head>
 <body>
-    <div id="byte-background"></div>
+    <div id="byte-background">
+        <div id="byte-content"></div>
+    </div>
     <div class="container">
-        <h1>MP4 Parser (Zig WASM)</h1>
-        <p>Upload an MP4 file to parse and play it. The parser will log byte information to the console.</p>
+        <h1>MP4 Parser</h1>
         
         <div id="upload-area" class="upload-area">
-            <p>Drag and drop an MP4 file here or</p>
+            <p>Drop MP4 file here</p>
             <input type="file" id="file-input" accept="video/mp4" style="display: none;">
             <button id="select-file">Select File</button>
         </div>
@@ -129,20 +158,14 @@
         </div>
         
         <div id="video-container">
-            <h2>Video Playback</h2>
             <video id="video-player" controls></video>
             <div class="controls">
                 <label>
                     <input type="checkbox" id="stream-bytes" checked>
-                    Stream bytes during playback
+                    Stream bytes
                 </label>
-                <button id="clear-log">Clear Log</button>
+                <button id="clear-background">Clear</button>
             </div>
-        </div>
-        
-        <div>
-            <h2>Log Output</h2>
-            <div id="log"></div>
         </div>
     </div>
 
@@ -154,10 +177,10 @@
         const statusElement = document.getElementById('status');
         const videoContainer = document.getElementById('video-container');
         const videoPlayer = document.getElementById('video-player');
-        const logOutput = document.getElementById('log');
         const streamBytesCheckbox = document.getElementById('stream-bytes');
-        const clearLogButton = document.getElementById('clear-log');
+        const clearBackgroundButton = document.getElementById('clear-background');
         const byteBackground = document.getElementById('byte-background');
+        const byteContent = document.getElementById('byte-content');
         
         // WASM module reference
         let zigModule = null;
@@ -165,25 +188,70 @@
         // Streaming state
         let streamingInterval = null;
         let currentStreamPosition = 0;
-        const BYTES_PER_STREAM = 32;
-        const STREAM_INTERVAL_MS = 500;
+        const BYTES_PER_STREAM = 64;
+        const STREAM_INTERVAL_MS = 300;
         
         // Background byte data
         let backgroundBytes = [];
-        const MAX_BACKGROUND_LINES = 100;
+        const MAX_BACKGROUND_LINES = 300;
         
-        // Log messages to UI
+        // Calculate how many characters fit in a line
+        function calculateCharsPerLine() {
+            const testElement = document.createElement('span');
+            testElement.style.fontFamily = 'monospace';
+            testElement.style.fontSize = byteContent.style.fontSize;
+            testElement.style.visibility = 'hidden';
+            testElement.textContent = 'X';
+            document.body.appendChild(testElement);
+            
+            const charWidth = testElement.getBoundingClientRect().width;
+            document.body.removeChild(testElement);
+            
+            return Math.floor(window.innerWidth / charWidth);
+        }
+        
+        // Calculate how many lines fit in the viewport
+        function calculateLinesInViewport() {
+            const testElement = document.createElement('div');
+            testElement.style.fontFamily = 'monospace';
+            testElement.style.fontSize = byteContent.style.fontSize;
+            testElement.style.visibility = 'hidden';
+            testElement.textContent = 'X';
+            document.body.appendChild(testElement);
+            
+            const lineHeight = testElement.getBoundingClientRect().height;
+            document.body.removeChild(testElement);
+            
+            return Math.floor(window.innerHeight / lineHeight);
+        }
+        
+        // Adjust font size to fill the screen
+        function adjustFontSize() {
+            const windowWidth = window.innerWidth;
+            const windowHeight = window.innerHeight;
+            
+            // Calculate font size based on window dimensions
+            const baseFontSize = Math.min(windowWidth / 80, windowHeight / 40);
+            byteContent.style.fontSize = `${baseFontSize}px`;
+            
+            // Update the background to fill the screen
+            updateByteBackground();
+        }
+        
+        // Log messages to console only
         function logMessage(message) {
-            const timestamp = new Date().toLocaleTimeString();
-            logOutput.innerHTML += `[${timestamp}] ${message}\n`;
-            logOutput.scrollTop = logOutput.scrollHeight;
             console.log(message);
         }
         
         // Add bytes to background
         function addToBackground(message) {
             if (message.includes(':')) {
-                backgroundBytes.push(message);
+                // Pad the message to fill the entire width
+                const charsPerLine = calculateCharsPerLine();
+                const paddedMessage = padMessageToWidth(message, charsPerLine);
+                
+                // Add new line at the end
+                backgroundBytes.push(paddedMessage);
                 
                 // Keep only the last MAX_BACKGROUND_LINES lines
                 if (backgroundBytes.length > MAX_BACKGROUND_LINES) {
@@ -195,14 +263,53 @@
             }
         }
         
-        // Update the byte background display
-        function updateByteBackground() {
-            byteBackground.textContent = backgroundBytes.join('\n');
+        // Pad a message to fill the entire width
+        function padMessageToWidth(message, width) {
+            // If the message is already longer than the width, return it as is
+            if (message.length >= width) {
+                return message;
+            }
+            
+            // Calculate padding needed on each side
+            const totalPadding = width - message.length;
+            const leftPadding = Math.floor(totalPadding / 2);
+            
+            // Pad with spaces on both sides to center the text
+            return ' '.repeat(leftPadding) + message + ' '.repeat(totalPadding - leftPadding);
         }
         
-        // Clear the log
-        function clearLog() {
-            logOutput.innerHTML = '';
+        // Update the byte background display
+        function updateByteBackground() {
+            byteContent.innerHTML = '';
+            
+            // Calculate visible lines
+            const visibleLines = calculateLinesInViewport();
+            const startIndex = Math.max(0, backgroundBytes.length - visibleLines);
+            
+            // Add empty lines at the top if needed
+            if (backgroundBytes.length < visibleLines) {
+                const emptyLines = visibleLines - backgroundBytes.length;
+                for (let i = 0; i < emptyLines; i++) {
+                    const emptyLine = document.createElement('div');
+                    emptyLine.className = 'byte-line';
+                    emptyLine.innerHTML = '&nbsp;';
+                    byteContent.appendChild(emptyLine);
+                }
+            }
+            
+            // Add actual content lines
+            for (let i = startIndex; i < backgroundBytes.length; i++) {
+                const lineElement = document.createElement('div');
+                lineElement.className = 'byte-line';
+                lineElement.textContent = backgroundBytes[i];
+                byteContent.appendChild(lineElement);
+            }
+        }
+        
+        // Clear the background
+        function clearBackground() {
+            backgroundBytes = [];
+            updateByteBackground();
         }
         
         // Start streaming bytes
@@ -226,7 +333,7 @@
                         const originalConsoleLog = window.consoleLog;
                         window.consoleLog = (message) => {
                             addToBackground(message);
-                            originalConsoleLog(message);
+                            if (originalConsoleLog) originalConsoleLog(message);
                         };
                         
                         // Log bytes at the current position
@@ -269,14 +376,14 @@
                             
                             // Store original console log function
                             window.consoleLog = (msg) => {
-                                logMessage(msg);
+                                console.log(msg);
                             };
                             
                             // Log message and potentially add to background
                             if (message.includes(':') && message.match(/0x[0-9A-F]+:/)) {
                                 addToBackground(message);
                             }
-                            logMessage(message);
+                            console.log(message);
                         },
                         createVideoElement: (ptr, len) => {
                             const buffer = new Uint8Array(zigModule.memory.buffer);
@@ -289,6 +396,7 @@
                             // Update video player
                             videoPlayer.src = url;
                             videoContainer.style.display = 'block';
+                            uploadArea.style.display = 'none';
                             logMessage("Video ready for playback");
                             
                             // Setup video events
@@ -304,7 +412,7 @@
                 zigModule = instance.exports;
                 
                 // Now that the module is loaded, update the UI
-                statusElement.textContent = "WASM module loaded. Ready to process MP4 files.";
+                statusElement.textContent = "Ready to process MP4 files";
                 logMessage("MP4 Parser initialized");
                 
                 // Enable file input after module is ready
@@ -326,11 +434,11 @@
             zigModule.resetBuffer();
             videoPlayer.src = '';
             videoContainer.style.display = 'none';
+            uploadArea.style.display = 'block';
             stopStreamingBytes();
-            backgroundBytes = [];
-            updateByteBackground();
+            clearBackground();
             
-            statusElement.textContent = `Processing: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+            statusElement.textContent = `Processing: ${file.name}`;
             
             // Read file in chunks using FileReader
             const chunkSize = 1024 * 1024; // 1MB chunks
@@ -357,14 +465,14 @@
                     // Update progress
                     offset += chunk.length;
                     const progress = Math.min(100, Math.round((offset / file.size) * 100));
-                    statusElement.textContent = `Processing: ${file.name} (${progress}%)`;
+                    statusElement.textContent = `Processing: ${progress}%`;
                     
                     // Continue reading chunks
                     if (offset < file.size) {
                         readNextChunk();
                     } else {
                         // Done reading the file
-                        statusElement.textContent = `Parsing complete: ${file.name}`;
+                        statusElement.textContent = `Ready to play`;
                         
                         // Parse the MP4 file
                         zigModule.parseMP4();
@@ -373,7 +481,7 @@
                         const originalConsoleLog = window.consoleLog;
                         window.consoleLog = (message) => {
                             addToBackground(message);
-                            originalConsoleLog(message);
+                            if (originalConsoleLog) originalConsoleLog(message);
                         };
                         
                         zigModule.logBytes(128);
@@ -406,8 +514,8 @@
             }
         });
         
-        // Clear log button
-        clearLogButton.addEventListener('click', clearLog);
+        // Clear background button
+        clearBackgroundButton.addEventListener('click', clearBackground);
         
         // Stream bytes checkbox
         streamBytesCheckbox.addEventListener('change', () => {
@@ -437,9 +545,15 @@
             }
         });
         
+        // Window resize event
+        window.addEventListener('resize', () => {
+            adjustFontSize();
+        });
+        
         // Initialize the application
         window.addEventListener('load', () => {
             selectButton.disabled = true; // Disable until WASM loads
+            adjustFontSize(); // Set initial font size
             initWasm();
         });
     </script>
