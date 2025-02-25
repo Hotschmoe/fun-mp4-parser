@@ -24,7 +24,7 @@
             width: 100vw;
             height: 100vh;
             z-index: -1;
-            color: rgba(100, 100, 100, 0.1);
+            color: rgba(80, 80, 80, 0.15);
             font-family: monospace;
             overflow: hidden;
             pointer-events: none;
@@ -52,12 +52,7 @@
             text-overflow: ellipsis;
             white-space: nowrap;
             text-align: center;
-            opacity: 0;
-            animation: fadeIn 0.5s ease-out forwards;
-        }
-        @keyframes fadeIn {
-            from { opacity: 0; }
-            to { opacity: 1; }
+            opacity: 1;
         }
         .container {
             background-color: rgba(255, 255, 255, 0.8);
@@ -301,8 +296,8 @@
             // Update the background
             updateByteBackground();
             
-            // Process next byte after delay
-            setTimeout(processNextByte, 100);
+            // Process next byte after delay - faster processing
+            setTimeout(processNextByte, 50);
         }
         
         // Pad a message to fill the entire width
@@ -345,8 +340,8 @@
                 lineElement.className = 'byte-line';
                 lineElement.textContent = backgroundBytes[i];
                 
-                // Add a slight delay for each line to create a cascade effect
-                lineElement.style.animationDelay = `${(i - startIndex) * 0.05}s`;
+                // Minimal delay for animation to avoid conflicts
+                lineElement.style.animationDelay = `${(i - startIndex) * 0.01}s`;
                 
                 byteContent.appendChild(lineElement);
             }
