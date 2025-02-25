@@ -1,112 +1,125 @@
 # MP4 Parser Deployment Guide
 
-This guide will walk you through setting up and deploying your Zig-based MP4 parser that targets WebAssembly.
-
-## Prerequisites
-
-- [Zig 0.13.0](https://ziglang.org/download/) (or newer)
-- A modern web browser
-- Basic knowledge of command-line tools
+This guide explains how to deploy and use the Zig-based MP4 parser that targets WebAssembly.
 
 ## Project Structure
 
-Create a project directory with the following structure:
+The project is organized as follows:
 
 ```
-mp4-parser/
+fun-mp4-parser/
 ├── src/
-│   └── mp4_parser.zig
-├── build.zig
-└── www/
-    └── index.html
+│   └── mp4_parser.zig     # Zig source code for the MP4 parser
+├── www/                   # Web application directory (generated at build time)
+│   ├── index.html         # HTML/JS interface (copied from root)
+│   ├── mp4_parser.wasm    # Compiled WebAssembly module (generated)
+│   └── ...                # Other assets copied from /assets
+├── assets/                # Static assets for the web application
+│   ├── favicon.ico        # Favicon
+│   └── ...                # Other static files
+├── build.zig              # Zig build script
+├── index.html             # Source HTML file
+├── README.md              # Project documentation
+└── deployment_guide.md    # This guide
 ```
 
-## Step 1: Compile the Zig Code to WebAssembly
+## Automated Deployment
 
-1. Copy the Zig code from the `MP4 Parser in Zig v0.13 (WASM)` artifact into `src/mp4_parser.zig`
-2. Copy the build script from the `Zig Build Script (build.zig)` artifact into `build.zig`
-3. Run the following commands:
+The project includes an automated build and deployment process using Zig's build system.
+
+### Building the WebAssembly Module
+
+To build the WebAssembly module:
 
 ```bash
-# Navigate to your project directory
-cd mp4-parser
-
-# Build the WebAssembly binary
-zig build -Dtarget=wasm32-freestanding -Doptimize=ReleaseSmall
-
-# The output will be in zig-out/lib/mp4_parser.wasm
+zig build
 ```
 
-## Step 2: Prepare the Web Interface
+This compiles the Zig code to WebAssembly and places the output in the `zig-out/bin` directory.
 
-1. Copy the HTML/JS code from the `MP4 Player Integration` artifact into `www/index.html`
-2. Copy the WebAssembly binary to the www directory:
+### Deploying to the Web Directory
+
+To build and copy all necessary files to the `www` directory:
 
 ```bash
-cp zig-out/lib/mp4_parser.wasm www/
+zig build deploy
 ```
 
-## Step 3: Serve the Application
+This command:
+1. Clears the `www` directory (or creates it if it doesn't exist)
+2. Builds the WebAssembly module
+3. Copies the WebAssembly module to the `www` directory
+4. Copies the `index.html` file to the `www` directory
+5. Copies all files from the `assets` directory to the `www` directory
 
-You can use any web server to serve the files. Here's a simple way using Python:
+### Running the Web Server
+
+To build, deploy, and start a Python HTTP server:
 
 ```bash
-# Navigate to the www directory
-cd mp4-parser/www
-
-# Start a simple HTTP server
-python -m http.server 8000
+zig build run
 ```
 
+This command performs all the deployment steps and starts a Python HTTP server on port 8000.
 Then open your browser and navigate to `http://localhost:8000`.
 
-## Technical Details
+## Manual Deployment
+
+If you prefer to deploy manually, follow these steps:
+
+1. Build the WebAssembly module:
+   ```bash
+   zig build
+   ```
+
+2. Create a `www` directory if it doesn't exist:
+   ```bash
+   mkdir -p www
+   ```
+
+3. Copy the necessary files:
+   ```bash
+   cp zig-out/bin/mp4_parser.wasm www/
+   cp index.html www/
+   ```
+
+4. Start a web server:
+   ```bash
+   cd www
+   python -m http.server 8000
+   ```
+
+## Technical Implementation
 
 ### WebAssembly Integration
 
-The HTML file loads the Zig-compiled WebAssembly module and sets up the necessary imports for browser interaction. The key integration points are:
+The MP4 parser is implemented in Zig and compiled to WebAssembly. Key aspects of the implementation:
 
-1. **Memory Management**: WebAssembly modules have their own memory space that's shared with JavaScript through `memory.buffer`.
+1. **Memory Management**: 
+   - Uses a fixed-size buffer (1MB) for storing MP4 data
+   - Implements custom memory operations to work within WebAssembly constraints
+   - Avoids standard library functions that aren't compatible with the freestanding target
 
-2. **Function Exports**: The Zig code exports several functions that are called from JavaScript:
+2. **Function Exports**:
    - `addData`: Adds a chunk of MP4 data to the internal buffer
-   - `parseMP4`: Parses the buffered MP4 data
+   - `parseMP4`: Parses the buffered MP4 data and identifies box structures
    - `logBytes`: Logs a specified number of bytes to the console
    - `resetBuffer`: Clears the internal buffer
    - `getBufferUsed`: Returns the number of bytes in the buffer
 
-3. **Function Imports**: The WebAssembly module imports functions from JavaScript:
+3. **Function Imports**:
    - `consoleLog`: For logging messages to the browser console
    - `createVideoElement`: For creating a video element with the processed data
 
-### MP4 Format Basics
+### MP4 Format Parsing
 
-The parser handles the basic MP4 container format, which consists of "boxes" (also called atoms). Each box has:
-
-- A 4-byte size field
-- A 4-byte type field (e.g., 'ftyp', 'moov', 'mdat')
-- Box-specific data
-
-The parser identifies these boxes and logs their types and sizes to help understand the structure of the MP4 file.
-
-## Customization
-
-You can extend the parser to handle specific MP4 features:
-
-1. **Metadata Extraction**: Enhance the parser to extract metadata from the 'moov' box.
-2. **Streaming Support**: Modify to support fragmented MP4 files for streaming.
-3. **Visual Effects**: Add custom WebGL effects using the logged byte data.
+The parser handles the basic MP4 container format by:
+- Identifying box headers (size and type)
+- Logging box information to the console
+- Passing the complete MP4 data to the browser for playback
 
 ## Troubleshooting
 
 - **CORS Issues**: If loading local files, you may encounter CORS errors. Make sure to serve your files from a proper web server.
-- **Large Files**: The current implementation uses a fixed buffer size. For larger files, consider implementing a more sophisticated memory management strategy.
-- **Browser Compatibility**: Ensure your browser supports WebAssembly. All modern browsers (Chrome, Firefox, Safari, Edge) should work fine.
-
-## Further Optimization
-
-For production use, consider these optimizations:
-
-1. **Chunk Processing**: Process MP4 data in smaller chunks to handle large files more efficiently.
-2. **Web Workers**: Move the parsing logic to a Web Worker to prevent UI blocking.
-3. **SIMD Instructions**: Use SIMD instructions in Zig for faster processing when available.
+- **Large Files**: The current implementation uses a fixed buffer size (1MB). For larger files, you may need to increase the buffer size in `mp4_parser.zig`.
+- **Python Command**: If you have Python installed as `py` instead of `python`, the build script will attempt to use both commands.

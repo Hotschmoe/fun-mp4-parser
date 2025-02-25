@@ -49,11 +49,16 @@ pub fn build(b: *std.Build) void {
     });
     copy_html.step.dependOn(&clear_www.step);
 
+    // Create a step to copy all files from the assets directory to the www directory
+    const copy_assets = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "if (Test-Path assets) { Copy-Item -Path assets\\* -Destination www\\ -Recurse -Force }" });
+    copy_assets.step.dependOn(&clear_www.step);
+
     // Add a run step to start a Python HTTP server
     // Try both 'py' and 'python' commands to be compatible with different systems
     const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; try { py -m http.server 8000 } catch { python -m http.server 8000 }" });
     run_cmd.step.dependOn(&copy_wasm.step);
     run_cmd.step.dependOn(&copy_html.step);
+    run_cmd.step.dependOn(&copy_assets.step);
 
     const run_step = b.step("run", "Build, deploy, and start HTTP server");
     run_step.dependOn(&run_cmd.step);
@@ -62,6 +67,7 @@ pub fn build(b: *std.Build) void {
     const deploy_step = b.step("deploy", "Build and copy files to www directory");
     deploy_step.dependOn(&copy_wasm.step);
     deploy_step.dependOn(&copy_html.step);
+    deploy_step.dependOn(&copy_assets.step);
 }
 
 // To set 'python' as an alias for 'py' on Windows:
