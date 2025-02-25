@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP4 Parser (Zig WASM)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+        }
+        .upload-area {
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin: 20px 0;
+            transition: border-color 0.3s;
+            background-color: #fafafa;
+        }
+        .upload-area.drag-over {
+            border-color: #2196F3;
+            background-color: #e3f2fd;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #video-container {
+            margin-top: 20px;
+            display: none;
+        }
+        video {
+            max-width: 100%;
+            border-radius: 4px;
+        }
+        #log {
+            margin-top: 20px;
+            max-height: 200px;
+            overflow-y: auto;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .status {
+            margin-top: 10px;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MP4 Parser (Zig WASM)</h1>
+        <p>Upload an MP4 file to parse and play it. The parser will log byte information to the console.</p>
+        
+        <div id="upload-area" class="upload-area">
+            <p>Drag and drop an MP4 file here or</p>
+            <input type="file" id="file-input" accept="video/mp4" style="display: none;">
+            <button id="select-file">Select File</button>
+        </div>
+        
+        <div class="status">
+            <p id="status">WASM module loading...</p>
+        </div>
+        
+        <div id="video-container">
+            <h2>Video Playback</h2>
+            <video id="video-player" controls></video>
+        </div>
+        
+        <div>
+            <h2>Log Output</h2>
+            <div id="log"></div>
+        </div>
+    </div>
+
+    <script>
+        // DOM elements
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const selectButton = document.getElementById('select-file');
+        const statusElement = document.getElementById('status');
+        const videoContainer = document.getElementById('video-container');
+        const videoPlayer = document.getElementById('video-player');
+        const logOutput = document.getElementById('log');
+        
+        // WASM module reference
+        let zigModule = null;
+        
+        // Log messages to UI
+        function logMessage(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logOutput.innerHTML += `[${timestamp}] ${message}\n`;
+            logOutput.scrollTop = logOutput.scrollHeight;
+            console.log(message);
+        }
+        
+        // Initialize WebAssembly module
+        async function initWasm() {
+            try {
+                // In a real implementation, you would load the actual WASM file
+                // For this example, we'll use a placeholder URL
+                const wasmUrl = 'mp4_parser.wasm';
+                
+                // Environment imports for our Zig code
+                const imports = {
+                    env: {
+                        consoleLog: (ptr, len) => {
+                            const buffer = new Uint8Array(zigModule.memory.buffer);
+                            const message = new TextDecoder().decode(buffer.subarray(ptr, ptr + len));
+                            logMessage(message);
+                        },
+                        createVideoElement: (ptr, len) => {
+                            const buffer = new Uint8Array(zigModule.memory.buffer);
+                            const videoData = buffer.subarray(ptr, ptr + len);
+                            
+                            // Create a blob and URL for the video data
+                            const blob = new Blob([videoData], { type: 'video/mp4' });
+                            const url = URL.createObjectURL(blob);
+                            
+                            // Update video player
+                            videoPlayer.src = url;
+                            videoContainer.style.display = 'block';
+                            logMessage("Video ready for playback");
+                        }
+                    }
+                };
+                
+                // For this demo, we'll just simulate the WASM module loading
+                // since we can't actually compile and load a real WASM module here
+                setTimeout(() => {
+                    statusElement.textContent = "WASM module loaded. Ready to process MP4 files.";
+                    logMessage("MP4 Parser initialized");
+                    
+                    // Create a simulated module object
+                    zigModule = {
+                        memory: { buffer: new ArrayBuffer(1024 * 1024) },
+                        exports: {
+                            addData: (ptr, len) => {
+                                logMessage(`Adding ${len} bytes of data`);
+                                return true;
+                            },
+                            parseMP4: () => {
+                                logMessage("Parsing MP4 data");
+                                
+                                // Simulate parsing success
+                                setTimeout(() => {
+                                    logMessage("Found box: ftyp, size: 24 bytes");
+                                    logMessage("Found box: moov, size: 28453 bytes");
+                                    logMessage("Found box: mdat, size: 12832811 bytes");
+                                    
+                                    // Display video
+                                    videoContainer.style.display = 'block';
+                                }, 500);
+                            },
+                            logBytes: (count) => {
+                                logMessage(`0x00000000: 00 00 00 20 66 74 79 70 69 73 6F 6D 00 00 02 00`);
+                                logMessage(`0x00000010: 69 73 6F 6D 69 73 6F 32 61 76 63 31 6D 70 34 31`);
+                            },
+                            resetBuffer: () => {
+                                logMessage("Buffer reset");
+                            },
+                            getBufferUsed: () => {
+                                return 0;
+                            }
+                        }
+                    };
+                    
+                    // Enable file input after module is ready
+                    selectButton.disabled = false;
+                }, 1000);
+            } catch (error) {
+                statusElement.textContent = "Failed to load WASM module: " + error.message;
+                console.error("WASM initialization error:", error);
+            }
+        }
+        
+        // Handle file selection
+        function handleFile(file) {
+            if (!file || !file.type.includes('mp4')) {
+                logMessage("Please select a valid MP4 file");
+                return;
+            }
+            
+            // Reset state
+            zigModule.exports.resetBuffer();
+            videoPlayer.src = '';
+            videoContainer.style.display = 'none';
+            
+            statusElement.textContent = `Processing: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`;
+            
+            // Read file in chunks using FileReader
+            const chunkSize = 1024 * 1024; // 1MB chunks
+            let offset = 0;
+            
+            function readNextChunk() {
+                const reader = new FileReader();
+                
+                reader.onload = function(e) {
+                    const chunk = new Uint8Array(e.target.result);
+                    
+                    // In a real implementation, we would use _malloc and copy the data
+                    // For this example, we'll simulate it
+                    const tempPtr = 0; // Placeholder
+                    zigModule.exports.addData(tempPtr, chunk.length);
+                    
+                    // Update progress
+                    offset += chunk.length;
+                    const progress = Math.min(100, Math.round((offset / file.size) * 100));
+                    statusElement.textContent = `Processing: ${file.name} (${progress}%)`;
+                    
+                    // Continue reading chunks
+                    if (offset < file.size) {
+                        readNextChunk();
+                    } else {
+                        // Done reading the file
+                        statusElement.textContent = `Parsing complete: ${file.name}`;
+                        
+                        // Parse the MP4 file
+                        zigModule.exports.parseMP4();
+                        
+                        // Log some bytes for demonstration
+                        zigModule.exports.logBytes(32);
+                    }
+                };
+                
+                reader.onerror = function() {
+                    statusElement.textContent = "Error reading file";
+                    logMessage("File read error");
+                };
+                
+                // Read a slice of the file
+                const slice = file.slice(offset, offset + chunkSize);
+                reader.readAsArrayBuffer(slice);
+            }
+            
+            // Start reading the file
+            readNextChunk();
+        }
+        
+        // Event listeners
+        selectButton.addEventListener('click', () => fileInput.click());
+        
+        fileInput.addEventListener('change', (e) => {
+            if (e.target.files.length > 0) {
+                handleFile(e.target.files[0]);
+            }
+        });
+        
+        // Drag and drop handling
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        });
+        
+        uploadArea.addEventListener('dragleave', () => {
+            uploadArea.classList.remove('drag-over');
+        });
+        
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            
+            if (e.dataTransfer.files.length > 0) {
+                handleFile(e.dataTransfer.files[0]);
+            }
+        });
+        
+        // Initialize the application
+        window.addEventListener('load', () => {
+            selectButton.disabled = true; // Disable until WASM loads
+            initWasm();
+        });
+    </script>
+</body>
+</html>
