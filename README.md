@@ -61,6 +61,16 @@ A lightweight MP4 parser written in Zig v0.13 targeting WebAssembly, allowing fo
 - `zig build deploy` - Build and copy files to the www directory
 - `zig build run` - Build, deploy, and start http-zerver
 
+## Test Decoder
+
+```ffmpeg -f lavfi -i "sine=frequency=440:sample_rate=44100:duration=10" -c:a aac -b:a 128k -f mp4 test_audio.mp4```
+
+This generates a clean MP4 with:
+AAC audio (LC profile, 128 kbps).
+44.1 kHz sample rate.
+Mono channel (you can add -ac 2 for stereo).
+No video stream, keeping it simple.
+
 ## Server Implementation
 
 This project uses http-zerver, a lightweight HTTP server written in Zig, for development and testing. The server is integrated into the build.zig script and automatically serves files from the www directory when running `zig build run`. This replaces the previous Python-based server implementation with a more efficient, native solution.
