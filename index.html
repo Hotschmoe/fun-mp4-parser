@@ -122,6 +122,31 @@
         .speed-control {
             display: none;
         }
+        /* Metadata display styles */
+        #metadata-container {
+            margin-top: 15px;
+            display: none;
+            background-color: rgba(240, 240, 240, 0.8);
+            border-radius: 4px;
+            padding: 10px;
+            font-family: monospace;
+            font-size: 14px;
+        }
+        .metadata-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+        }
+        .metadata-label {
+            color: #555;
+            flex: 1;
+        }
+        .metadata-value {
+            color: #333;
+            flex: 1;
+            text-align: right;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -141,6 +166,33 @@
             <p id="status">WASM module loading...</p>
         </div>
         
+        <div id="metadata-container">
+            <div class="metadata-row">
+                <span class="metadata-label">Codec:</span>
+                <span id="metadata-codec" class="metadata-value">-</span>
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Bitrate:</span>
+                <span id="metadata-bitrate" class="metadata-value">-</span>
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Size:</span>
+                <span id="metadata-size" class="metadata-value">-</span>
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Sample Rate:</span>
+                <span id="metadata-sample-rate" class="metadata-value">-</span>
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Sample Size:</span>
+                <span id="metadata-sample-size" class="metadata-value">-</span>
+            </div>
+            <div class="metadata-row">
+                <span class="metadata-label">Samples:</span>
+                <span id="metadata-samples" class="metadata-value">-</span>
+            </div>
+        </div>
+        
         <div id="video-container">
             <video id="video-player" controls></video>
         </div>
@@ -156,6 +208,13 @@
         const videoPlayer = document.getElementById('video-player');
         const byteBackground = document.getElementById('byte-background');
         const byteContent = document.getElementById('byte-content');
+        const metadataContainer = document.getElementById('metadata-container');
+        const metadataCodec = document.getElementById('metadata-codec');
+        const metadataBitrate = document.getElementById('metadata-bitrate');
+        const metadataSize = document.getElementById('metadata-size');
+        const metadataSampleRate = document.getElementById('metadata-sample-rate');
+        const metadataSampleSize = document.getElementById('metadata-sample-size');
+        const metadataSamples = document.getElementById('metadata-samples');
         
         // WASM module reference
         let zigModule = null;
@@ -383,6 +442,41 @@
             }
         }
         
+        // Format file size in human-readable format
+        function formatFileSize(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Format bitrate in human-readable format
+        function formatBitrate(bps) {
+            if (bps === 0) return '0 bps';
+            
+            const k = 1000;
+            const sizes = ['bps', 'Kbps', 'Mbps', 'Gbps'];
+            const i = Math.floor(Math.log(bps) / Math.log(k));
+            
+            return parseFloat((bps / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+        
+        // Update metadata display
+        function updateMetadataDisplay(codec, bitrate, size, sampleRate, sampleSize, samples) {
+            metadataCodec.textContent = codec;
+            metadataBitrate.textContent = formatBitrate(bitrate);
+            metadataSize.textContent = formatFileSize(size);
+            metadataSampleRate.textContent = sampleRate + ' Hz';
+            metadataSampleSize.textContent = sampleSize + ' bit';
+            metadataSamples.textContent = samples;
+            
+            // Show metadata container
+            metadataContainer.style.display = 'block';
+        }
+        
         // Initialize WebAssembly module
         async function initWasm() {
             try {
@@ -430,6 +524,14 @@
                             videoPlayer.onplay = startStreamingBytes;
                             videoPlayer.onpause = stopStreamingBytes;
                             videoPlayer.onended = stopStreamingBytes;
+                        },
+                        updateMetadata: (codecPtr, codecLen, bitrate, size, sampleRate, sampleSize, samples) => {
+                            const buffer = new Uint8Array(zigModule.memory.buffer);
+                            const codec = new TextDecoder().decode(buffer.subarray(codecPtr, codecPtr + codecLen));
+                            
+                            // Update metadata display
+                            updateMetadataDisplay(codec, bitrate, size, sampleRate, sampleSize, samples);
+                            logMessage(`Metadata updated: ${codec}, ${bitrate} bps, ${size} bytes`);
                         }
                     }
                 };
@@ -461,6 +563,7 @@
             zigModule.resetBuffer();
             videoPlayer.src = '';
             videoContainer.style.display = 'none';
+            metadataContainer.style.display = 'none';
             uploadArea.style.display = 'block';
             stopStreamingBytes();
             clearBackground();
