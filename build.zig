@@ -52,13 +52,6 @@ pub fn build(b: *std.Build) void {
     copy_wasm.step.dependOn(b.getInstallStep());
     copy_wasm.step.dependOn(&clear_www.step);
 
-    // Create a step to copy the index.html file to the www directory
-    const copy_html = b.addSystemCommand(&[_][]const u8{
-        "powershell", "-Command",       "Copy-Item",
-        "index.html", "www/index.html",
-    });
-    copy_html.step.dependOn(&clear_www.step);
-
     // Create a step to copy all files from the assets directory to the www directory
     const copy_assets = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "if (Test-Path assets) { Copy-Item -Path assets\\* -Destination www\\ -Recurse -Force }" });
     copy_assets.step.dependOn(&clear_www.step);
@@ -76,7 +69,6 @@ pub fn build(b: *std.Build) void {
     // Add a run step to start http-zerver
     const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; ./http-zerver.exe 8000 . -v" });
     run_cmd.step.dependOn(&copy_wasm.step);
-    run_cmd.step.dependOn(&copy_html.step);
     run_cmd.step.dependOn(&copy_assets.step);
     run_cmd.step.dependOn(&check_and_setup_server.step);
 
@@ -86,6 +78,5 @@ pub fn build(b: *std.Build) void {
     // Add a deploy step that only copies the files without starting the server
     const deploy_step = b.step("deploy", "Build and copy files to www directory");
     deploy_step.dependOn(&copy_wasm.step);
-    deploy_step.dependOn(&copy_html.step);
     deploy_step.dependOn(&copy_assets.step);
 }
