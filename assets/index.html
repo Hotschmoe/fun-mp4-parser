@@ -289,6 +289,16 @@
         // WASM module reference
         let zigModule = null;
         
+        // Metadata object to store audio information
+        let metadata = {
+            codec: '',
+            bitrate: 0,
+            size: 0,
+            sample_rate: 44100, // Default sample rate
+            sample_size: 16,    // Default sample size
+            samples: 0
+        };
+        
         // Streaming state
         let streamingActive = false;
         let animationFrameId = null;
@@ -591,7 +601,8 @@
                             if (!audioContext) initAudio();
                             
                             const samples = new Int16Array(zigModule.memory.buffer, ptr, len);
-                            const audioBuffer = audioContext.createBuffer(1, len, metadata.sample_rate || 44100);
+                            const sampleRate = metadata.sample_rate || 44100; // Use default if not set
+                            const audioBuffer = audioContext.createBuffer(1, len, sampleRate);
                             const channelData = audioBuffer.getChannelData(0);
                             
                             // Convert Int16 to Float32
@@ -609,6 +620,14 @@
                         updateMetadata: (codecPtr, codecLen, bitrate, size, sampleRate, sampleSize, samples) => {
                             const buffer = new Uint8Array(zigModule.memory.buffer);
                             const codec = new TextDecoder().decode(buffer.subarray(codecPtr, codecPtr + codecLen));
+                            
+                            // Store values in the metadata object
+                            metadata.codec = codec;
+                            metadata.bitrate = bitrate;
+                            metadata.size = size;
+                            metadata.sample_rate = sampleRate;
+                            metadata.sample_size = sampleSize;
+                            metadata.samples = samples;
                             
                             // Update metadata display
                             updateMetadataDisplay(codec, bitrate, size, sampleRate, sampleSize, samples);

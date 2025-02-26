@@ -151,7 +151,11 @@ export fn decodeAudio() void {
     var offset: usize = 0;
     logString("Starting audio decoding");
 
-    while (offset + 8 <= buffer_used) {
+    // Add a maximum frame count to prevent infinite loops
+    const max_frames: usize = 10000; // Reasonable limit for most audio files
+    var frame_count: usize = 0;
+
+    while (offset + 8 <= buffer_used and frame_count < max_frames) {
         const header = parseBoxHeader(buffer[offset..], &offset);
         const box_size = header.totalSize();
 
@@ -160,15 +164,39 @@ export fn decodeAudio() void {
             var mdat_offset: usize = offset;
             const mdat_end = offset + @as(usize, @intCast(box_size - 8)); // Subtract header size
 
-            while (mdat_offset < mdat_end) {
+            // Add a safety counter to prevent infinite loops within a single mdat box
+            var safety_counter: usize = 0;
+            const max_attempts: usize = 100000; // Reasonable limit
+
+            while (mdat_offset < mdat_end and safety_counter < max_attempts) {
+                safety_counter += 1;
+
                 if (decodeAACFrame(&buffer, mdat_offset)) |result| {
                     sendPCMSamples(result.samples.ptr, result.samples.len);
+
+                    // Ensure we're actually advancing through the buffer
+                    if (result.new_offset <= mdat_offset) {
+                        logString("Error: Frame decoding not advancing, stopping");
+                        break;
+                    }
+
                     mdat_offset = result.new_offset;
                     logString("Decoded AAC frame");
+                    frame_count += 1;
+
+                    // Limit the number of frames we decode
+                    if (frame_count >= max_frames) {
+                        logString("Reached maximum frame count, stopping");
+                        break;
+                    }
                 } else {
                     // If we can't decode a frame, try the next byte
                     mdat_offset += 1;
                 }
+            }
+
+            if (safety_counter >= max_attempts) {
+                logString("Reached maximum decode attempts, stopping");
             }
         }
 
@@ -652,6 +680,16 @@ fn decodeAACFrame(data: *const [100 * 1024 * 1024]u8, offset: usize) ?AACDecodeR
         (@as(u32, data[offset + 4]) << 3) |
         (@as(u32, data[offset + 5]) >> 5));
 
+    // Ensure frame length is reasonable to prevent infinite loops
+    if (frame_length < 7) {
+        logString("Invalid AAC frame length (too small), skipping");
+        return null;
+    }
+    if (frame_length > 8192) {
+        logString("Invalid AAC frame length (too large), skipping");
+        return null;
+    }
+
     if (offset + frame_length > buffer_used) return null;
 
     // Placeholder: Generate 1024 dummy PCM samples (AAC LC typically outputs 1024 samples per frame)
@@ -666,5 +704,14 @@ fn decodeAACFrame(data: *const [100 * 1024 * 1024]u8, offset: usize) ?AACDecodeR
     // TODO: Replace with real AAC decoding (e.g., Huffman decoding, IMDCT)
     logString("Decoding AAC frame (placeholder)");
 
-    return AACDecodeResult{ .samples = pcm_samples[0..1024], .new_offset = offset + frame_length };
+    // Ensure we're advancing by at least the frame length
+    const new_offset = offset + frame_length;
+
+    // Double-check that we're actually advancing
+    if (new_offset <= offset) {
+        logString("Error: Frame advancement calculation error");
+        return null;
+    }
+
+    return AACDecodeResult{ .samples = pcm_samples[0..1024], .new_offset = new_offset };
 }
