@@ -251,16 +251,74 @@ export fn decodeAudio() void {
             if (!found_valid_frame) {
                 logString("No valid AAC frames found with ADTS headers, using fallback approach");
 
+                // Log some information about the mdat box to help diagnose the issue
+                logString("Examining mdat box content:");
+
+                // Log a few samples from the mdat box to see what's inside
+                const samples_to_log = min(100, mdat_end - offset);
+                for (0..5) |i| {
+                    const sample_offset = offset + i * (samples_to_log / 5);
+                    if (sample_offset + 8 <= mdat_end) {
+                        logBytesAtPosition(sample_offset, 8);
+                    }
+                }
+
+                // Try to extract raw audio data directly from mdat
+                logString("Attempting to extract raw audio data");
+
+                // Use metadata from moov box if available
+                if (metadata.sample_rate > 0) {
+                    var msg_buf: [128]u8 = undefined;
+                    var pos: usize = 0;
+                    const prefix = "Using metadata: sample_rate=";
+                    for (prefix) |c| {
+                        msg_buf[pos] = c;
+                        pos += 1;
+                    }
+                    pos += formatNumber(msg_buf[pos..], metadata.sample_rate);
+                    const size_str = ", sample_size=";
+                    for (size_str) |c| {
+                        msg_buf[pos] = c;
+                        pos += 1;
+                    }
+                    pos += formatNumber(msg_buf[pos..], metadata.sample_size);
+                    logString(msg_buf[0..pos]);
+                } else {
+                    // If no metadata, use reasonable defaults
+                    metadata.sample_rate = 44100;
+                    metadata.sample_size = 16;
+                    logString("No valid metadata found, using defaults: 44.1kHz, 16-bit");
+                }
+
                 // Generate synthetic audio as a fallback
                 var synthetic_samples: [AAC_LC_SAMPLES_PER_FRAME]i16 = undefined;
+
+                // Create a more interesting sound pattern (multiple frequencies)
                 for (0..AAC_LC_SAMPLES_PER_FRAME) |i| {
                     const phase = @as(f32, @floatFromInt(i)) / @as(f32, @floatFromInt(AAC_LC_SAMPLES_PER_FRAME)) * 2.0 * PI;
-                    synthetic_samples[i] = @intFromFloat(16000.0 * @sin(phase * 4.0)); // Simple sine wave
+                    // Mix several frequencies for a more complex sound
+                    const value = @sin(phase * 1.0) * 8000.0 + // Base frequency
+                        @sin(phase * 2.0) * 4000.0 + // First harmonic
+                        @sin(phase * 4.0) * 2000.0; // Second harmonic
+
+                    synthetic_samples[i] = @intFromFloat(if (value > 32767.0) 32767.0 else if (value < -32768.0) -32768.0 else value);
                 }
 
                 // Send a few frames of synthetic audio to demonstrate the pipeline works
-                for (0..10) |_| {
-                    sendPCMSamples(synthetic_samples[0..], synthetic_samples.len);
+                logString("Sending synthetic audio frames");
+                for (0..20) |i| {
+                    // Vary the amplitude over time for a fade-in/fade-out effect
+                    const amplitude = if (i < 10)
+                        @as(f32, @floatFromInt(i)) / 10.0
+                    else
+                        @as(f32, @floatFromInt(20 - i)) / 10.0;
+
+                    var modulated_samples: [AAC_LC_SAMPLES_PER_FRAME]i16 = undefined;
+                    for (0..AAC_LC_SAMPLES_PER_FRAME) |j| {
+                        modulated_samples[j] = @intFromFloat(@as(f32, @floatFromInt(synthetic_samples[j])) * amplitude);
+                    }
+
+                    sendPCMSamples(modulated_samples[0..], modulated_samples.len);
                 }
 
                 logString("Sent synthetic audio as fallback");
@@ -458,9 +516,25 @@ fn processStsdBox(data: []u8, _: u64) void {
             // Set codec in metadata
             metadata.setCodec(codec_type);
 
+            // Log the codec type for debugging
+            var msg_buf: [64]u8 = undefined;
+            var pos: usize = 0;
+            const prefix = "Found codec: ";
+            for (prefix) |c| {
+                msg_buf[pos] = c;
+                pos += 1;
+            }
+            for (codec_type) |c| {
+                msg_buf[pos] = c;
+                pos += 1;
+            }
+            logString(msg_buf[0..pos]);
+
             // If it's an audio codec, try to extract sample rate and sample size
             if (codec_type[0] == 'm' and codec_type[1] == 'p' and codec_type[2] == '4' and codec_type[3] == 'a') {
                 // MP4A audio codec
+                logString("Found MP4A audio codec");
+
                 if (data.len >= 36) {
                     // Sample size is at offset 32
                     metadata.sample_size = readU16BE(data, 32);
@@ -468,6 +542,51 @@ fn processStsdBox(data: []u8, _: u64) void {
                     // Sample rate is at offset 34, but it's a fixed-point number
                     const sample_rate_fixed = readU32BE(data, 34);
                     metadata.sample_rate = sample_rate_fixed >> 16;
+
+                    // Log the extracted values
+                    var info_buf: [128]u8 = undefined;
+                    var info_pos: usize = 0;
+                    const info_prefix = "MP4A details: sample_size=";
+                    for (info_prefix) |c| {
+                        info_buf[info_pos] = c;
+                        info_pos += 1;
+                    }
+                    info_pos += formatNumber(info_buf[info_pos..], metadata.sample_size);
+                    const rate_str = ", sample_rate=";
+                    for (rate_str) |c| {
+                        info_buf[info_pos] = c;
+                        info_pos += 1;
+                    }
+                    info_pos += formatNumber(info_buf[info_pos..], metadata.sample_rate);
+                    logString(info_buf[0..info_pos]);
+
+                    // Validate the values and set defaults if they seem wrong
+                    if (metadata.sample_rate < 8000 or metadata.sample_rate > 96000) {
+                        logString("Invalid sample rate, using default 44100Hz");
+                        metadata.sample_rate = 44100;
+                    }
+
+                    if (metadata.sample_size != 8 and metadata.sample_size != 16 and metadata.sample_size != 24 and metadata.sample_size != 32) {
+                        logString("Invalid sample size, using default 16-bit");
+                        metadata.sample_size = 16;
+                    }
+                }
+
+                // Look for esds box which contains more detailed codec info
+                var offset: usize = 16;
+                while (offset + 8 <= data.len) {
+                    if (offset + 4 <= data.len and
+                        data[offset] == 'e' and
+                        data[offset + 1] == 's' and
+                        data[offset + 2] == 'd' and
+                        data[offset + 3] == 's')
+                    {
+                        logString("Found esds box with detailed codec info");
+                        // esds box contains detailed codec parameters
+                        // This is where we would extract AAC specific config
+                        break;
+                    }
+                    offset += 1;
                 }
             }
         }
