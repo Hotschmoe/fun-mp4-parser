@@ -1,11 +1,13 @@
 // MP4 Parser in Zig v0.13
 // Build target: WebAssembly
-// Simple MP4 parser that logs bytes to browser console
+// Simple MP4 parser that logs bytes to browser console and decodes audio
 
 // WASM imports for browser interaction
 extern "env" fn consoleLog(ptr: [*]const u8, len: usize) void;
-extern "env" fn createVideoElement(ptr: [*]const u8, len: usize) void;
+// extern "env" fn createVideoElement(ptr: [*]const u8, len: usize) void; // Removed for audio-only
 extern "env" fn updateMetadata(codec_ptr: [*]const u8, codec_len: usize, bitrate: u32, size: u32, sample_rate: u32, sample_size: u32, samples: u32) void;
+// New audio-related imports
+extern "env" fn sendPCMSamples(ptr: [*]const i16, len: usize) void;
 
 // Box types for MP4 format
 const BoxType = struct {
@@ -136,11 +138,49 @@ export fn parseMP4() void {
         }
     }
 
-    // Create a video element in the browser with data URL for playback
-    createVideoUrl();
+    // Replace video creation with audio decoding
+    // createVideoUrl(); // Removed
+    decodeAudio();
 
     // Send metadata to JavaScript
     updateMetadataInBrowser();
+}
+
+// New audio decoding function
+export fn decodeAudio() void {
+    var offset: usize = 0;
+    logString("Starting audio decoding");
+
+    while (offset + 8 <= buffer_used) {
+        const header = parseBoxHeader(buffer[offset..], &offset);
+        const box_size = header.totalSize();
+
+        if (header.type_code.eql("mdat")) {
+            logString("Found media data box, extracting audio frames");
+            var mdat_offset: usize = offset;
+            const mdat_end = offset + @as(usize, @intCast(box_size - 8)); // Subtract header size
+
+            while (mdat_offset < mdat_end) {
+                if (decodeAACFrame(&buffer, mdat_offset)) |result| {
+                    sendPCMSamples(result.samples.ptr, result.samples.len);
+                    mdat_offset = result.new_offset;
+                    logString("Decoded AAC frame");
+                } else {
+                    // If we can't decode a frame, try the next byte
+                    mdat_offset += 1;
+                }
+            }
+        }
+
+        // Skip to the next box
+        if (box_size > 0 and offset + box_size <= buffer_used) {
+            offset += @intCast(box_size - (offset - (offset - 8)));
+        } else {
+            break;
+        }
+    }
+
+    logString("Audio decoding complete");
 }
 
 // Process moov box to extract metadata
@@ -574,7 +614,8 @@ fn readU64BE(data: []u8, offset: usize) u64 {
 fn createVideoUrl() void {
     // In a real implementation, we might validate and extract necessary MP4 data
     // For simplicity, we'll just pass the whole buffer to the browser
-    createVideoElement(&buffer, buffer_used);
+    // createVideoElement(&buffer, buffer_used); // Removed for audio-only
+    // This function is kept as a placeholder for future video support
 }
 
 // Helper to log strings to browser console
@@ -591,4 +632,39 @@ export fn resetBuffer() void {
 // Return the number of bytes currently in the buffer
 export fn getBufferUsed() usize {
     return buffer_used;
+}
+
+// AAC frame decoding result
+const AACDecodeResult = struct {
+    samples: []i16,
+    new_offset: usize,
+};
+
+// Decode an AAC frame to PCM samples (simplified placeholder)
+fn decodeAACFrame(data: *const [100 * 1024 * 1024]u8, offset: usize) ?AACDecodeResult {
+    if (buffer_used < offset + 7) return null;
+
+    // Parse ADTS header (simplified)
+    const syncword = (@as(u16, data[offset]) << 4) | (data[offset + 1] >> 4);
+    if (syncword != 0xFFF) return null;
+
+    const frame_length = ((@as(u32, data[offset + 3] & 0x3) << 11) |
+        (@as(u32, data[offset + 4]) << 3) |
+        (@as(u32, data[offset + 5]) >> 5));
+
+    if (offset + frame_length > buffer_used) return null;
+
+    // Placeholder: Generate 1024 dummy PCM samples (AAC LC typically outputs 1024 samples per frame)
+    var pcm_samples: [1024]i16 = undefined;
+    for (0..1024) |i| {
+        // Simple sine wave for testing
+        const phase = @as(f32, @floatFromInt(i)) / 1024.0 * 2.0 * 3.14159;
+        const amplitude: f32 = 16000.0;
+        pcm_samples[i] = @intFromFloat(amplitude * @sin(phase * 2.0)); // Simple sine wave
+    }
+
+    // TODO: Replace with real AAC decoding (e.g., Huffman decoding, IMDCT)
+    logString("Decoding AAC frame (placeholder)");
+
+    return AACDecodeResult{ .samples = pcm_samples[0..1024], .new_offset = offset + frame_length };
 }
