@@ -16,34 +16,54 @@ A lightweight MP4 parser written in Zig v0.13 targeting WebAssembly, allowing fo
 ### Prerequisites
 
 - [Zig 0.13.0](https://ziglang.org/download/) or newer
-- Python (for serving the web application)
+- PowerShell
 - A modern web browser with WebAssembly support
 
-### Building and Running
+### Initial Setup
 
 1. Clone this repository:
    ```
-   git clone https://github.com/yourusername/fun-mp4-parser.git
+   git clone https://github.com/Hotschmoe/fun-mp4-parser.git
    cd fun-mp4-parser
    ```
 
-2. Build the project:
+2. Run the setup script to install http-zerver:
+   ```
+   .\setup_http_server.ps1
+   ```
+   This script will:
+   - Clone the http-zerver repository
+   - Build the http-zerver executable
+   - Copy the executable to your assets directory
+   - Clean up the temporary files
+
+### Building and Running
+
+1. Build the project:
    ```
    zig build
    ```
 
-3. Deploy and run the web server:
+2. Deploy and run the web server:
    ```
    zig build run
    ```
+   This will:
+   - Build the WebAssembly module
+   - Copy all necessary files to the www directory
+   - Start http-zerver on port 8000 serving the www directory
 
-4. Open your browser and navigate to `http://localhost:8000`
+3. Open your browser and navigate to `http://localhost:8000`
 
 ### Development Commands
 
 - `zig build` - Build the WebAssembly module
 - `zig build deploy` - Build and copy files to the www directory
-- `zig build run` - Build, deploy, and start the HTTP server
+- `zig build run` - Build, deploy, and start http-zerver
+
+## Server Implementation
+
+This project uses http-zerver, a lightweight HTTP server written in Zig, for development and testing. The server is integrated into the build.zig script and automatically serves files from the www directory when running `zig build run`. This replaces the previous Python-based server implementation with a more efficient, native solution.
 
 ## Implementation Details
 

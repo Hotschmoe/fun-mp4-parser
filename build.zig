@@ -65,10 +65,20 @@ pub fn build(b: *std.Build) void {
 
     // Add a run step to start a Python HTTP server
     // Try both 'py' and 'python' commands to be compatible with different systems
-    const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; try { py -m http.server 8000 } catch { python -m http.server 8000 }" });
+    // const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; try { py -m http.server 8000 } catch { python -m http.server 8000 }" });
+    // Check if http-zerver exists and run setup if needed
+    const check_and_setup_server = b.addSystemCommand(&[_][]const u8{
+        "powershell",
+        "-Command",
+        "if (-not (Test-Path assets/http-zerver.exe)) { Write-Host 'http-zerver not found. Running setup...'; .\\setup_http_server.ps1 }",
+    });
+
+    // Add a run step to start http-zerver
+    const run_cmd = b.addSystemCommand(&[_][]const u8{ "powershell", "-Command", "cd www; ./http-zerver.exe 8000 . -v" });
     run_cmd.step.dependOn(&copy_wasm.step);
     run_cmd.step.dependOn(&copy_html.step);
     run_cmd.step.dependOn(&copy_assets.step);
+    run_cmd.step.dependOn(&check_and_setup_server.step);
 
     const run_step = b.step("run", "Build, deploy, and start HTTP server");
     run_step.dependOn(&run_cmd.step);
