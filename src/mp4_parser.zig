@@ -181,7 +181,6 @@ export fn decodeAudio() void {
                     }
 
                     mdat_offset = result.new_offset;
-                    logString("Decoded AAC frame");
                     frame_count += 1;
 
                     // Limit the number of frames we decode
